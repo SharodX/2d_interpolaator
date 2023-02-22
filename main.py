@@ -88,6 +88,9 @@ df_example = load_data(st.secrets["public_gsheets_url"])
 if file_to_draw == "Näidisfail":
     df = df_example
 else:
+    if uploaded_file == None:
+        st.warning('Faili pole üles laetud')
+        st.stop()
     df = pd.read_csv(uploaded_file)
 
 #%%
