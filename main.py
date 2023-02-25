@@ -179,7 +179,7 @@ with sidebar:
                 cbar_breakpoints.append(st.session_state[f"number_{color}"])
         cmap = colors.ListedColormap(cbar_colors)
         levels = cbar_breakpoints
-        if not np.all(np.diff(levels) > 0):
+        if not np.all(np.diff(levels) > 0) and not freeze_selfbuilt_colorbars:
             with error_placeholder:
                 st.error("Värviskaala väärtused peavad olema kasvavas järjekorras")
                 st.stop()
