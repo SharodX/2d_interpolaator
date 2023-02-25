@@ -13,6 +13,7 @@ import pandas as pd
 import io
 import matplotlib.ticker as ticker
 import matplotlib as mpl
+from matplotlib import colors
 
 def discrete_cmap(N, base_cmap=None):
     """Create an N-bin discrete colormap from the specified input map"""
@@ -31,6 +32,16 @@ def discrete_cmap(N, base_cmap=None):
 
 # st.set_page_config(layout="wide")
 k = True
+
+min_cbars, max_cbars = 2, 10
+for n in range(max_cbars + 1):
+    if f"number_{n}" not in st.session_state:
+        st.session_state[f"number_{n}"] = n
+    if f"color_{n}" not in st.session_state:
+        if n == max_cbars + 1:
+            pass
+        cmap_proxy = discrete_cmap(max_cbars)(n/(max_cbars))
+        st.session_state[f"color_{n}"] = mpl.colors.rgb2hex(cmap_proxy)
 
 #%%
 
@@ -72,8 +83,13 @@ k = True
 #     st.pyplot(plot_all_cmaps(k))
 #%% upload file
 
-file_to_draw = st.radio("Kuvatud fail", ["Näidisfail", "Üleslaetud"])
+sidebar = st.sidebar
+
+with sidebar:
+    file_to_draw = st.radio("Kuvatud fail", ["Näidisfail", "Üleslaetud"])
+    
 uploaded_file = st.file_uploader("Lae oma fail üles", type ="csv")
+error_placeholder = st.empty()
 
 @st.cache_data
 def load_data(sheets_url):
@@ -105,71 +121,113 @@ v_min, v_max = v.min(), v.max()
 
 #%% Configure sidebar
 
-
-with st.sidebar:
-    ip_bounds_from_data = st.checkbox("Interpoleerimise piirid andmetest", value = True)
-    
-    if not ip_bounds_from_data:
+with sidebar:
+    with st.expander("Interpoleerimise seadistus"):
+        interpolation_type = st.selectbox("rbf-funktsiooni tüüp", ['multiquadric',
+                                                                   'inverse',
+                                                                   'gaussian',
+                                                                   'linear',
+                                                                   'cubic',
+                                                                   'quintic',
+                                                                   'thin_plate']
+                                      )
+        smoothing_factor = st.number_input("Silumise parameeter", 0.0, value = 0.0, format = "%.6f", step = 1e-6  )
+        dens = st.slider("Võrgustiku tihedus", 10, 1000, value = 300)
+        ip_bounds_from_data = st.checkbox("Graafiku piirid käsitsi", value = False)
         subcol1, subcol2 = st.columns(2)
         with subcol1:
-            ip_x_lower = st.number_input("x_min", -100.0, 100.0, value = x_min)
-            ip_y_lower = st.number_input("y_min",-100.0, 100.0, value = y_min)
+            ip_x_lower = st.number_input("x_min", -100.0, 100.0, value = x_min, disabled = not ip_bounds_from_data)
+            ip_y_lower = st.number_input("y_min",-100.0, 100.0, value = y_min, disabled = not ip_bounds_from_data)
         with subcol2:
-            ip_x_upper = st.number_input("x_max", ip_x_lower + 0.1, 100.0, value = x_max)
-            ip_y_upper = st.number_input("y_max", ip_y_lower + 0.1, 100.0, value = y_max)
-            
-    colorbar_bounds_from_data = st.checkbox("Värviskaala piirid andmetest", value = True)
-
-    if not colorbar_bounds_from_data:
-        subcol1, subcol2 = st.columns(2)
-        with subcol1:
-            colorbar_x_lower = st.number_input("cbar_min", 0.0, 10.0, value = v_min)
-        with subcol2:
-            colorbar_x_upper = st.number_input("cbar_max", 0.0, 10.0, value = v_max)
-            
-    x_axis_visible = st.checkbox("x-telg")
-    y_axis_visible = st.sidebar.checkbox("y-telg")
-    colorbar_visible = st.checkbox("colorbar")
-    colorbar_type = st.selectbox("Värviskaala tüüp", plt.colormaps())
+            ip_x_upper = st.number_input("x_max", ip_x_lower + 0.1, 100.0, value = x_max, disabled = not ip_bounds_from_data)
+            ip_y_upper = st.number_input("y_max", ip_y_lower + 0.1, 100.0, value = y_max, disabled = not ip_bounds_from_data)
+                
+    cbar_build = st.radio("test", options = ["Eelkonstrueeritud", "Ehitan ise"], label_visibility = "collapsed")
+    colorbar_visible = st.checkbox("Värviskaala")
     colorbar_float_format = st.slider("Värviskaala komakohad", 0, 3, value = 2)
-    axis_float_format = st.slider("Telgede komakohad", 0, 3, value = 1)
-    axis_step = st.number_input("Telje samm", 0.1, 10.0, value = 1.0)
+    if cbar_build == "Eelkonstrueeritud":
+        freeze_default_colorbars = False
+        freeze_selfbuilt_colorbars = True
+    else:
+        freeze_default_colorbars = True
+        freeze_selfbuilt_colorbars = False
+    with st.expander("Värviskaala eelkonstrueeritud"):
+        colorbar_type = st.selectbox("Värviskaala tüüp", plt.colormaps(), disabled = freeze_default_colorbars)
+        colorbar_divisions = st.slider("Värvijaotuste arv", 2, 20, value = 10, disabled = freeze_default_colorbars)
+        colorbar_bounds_from_data = st.checkbox("Värviskaala piirid käsitsi", value = False, disabled = freeze_default_colorbars)
+        subcol1, subcol2 = st.columns(2)
+        with subcol1:
+            colorbar_x_lower = st.number_input("cbar_min", 0.0, 10.0, value = v_min, disabled = not colorbar_bounds_from_data or freeze_default_colorbars)
+        with subcol2:
+            colorbar_x_upper = st.number_input("cbar_max", 0.0, 10.0, value = v_max, disabled = not colorbar_bounds_from_data or freeze_default_colorbars)           
+    with st.expander("Värviskaala ehitan ise"):
+        cbar_color_count = st.slider("Värvide arv", min_cbars, max_cbars, disabled = freeze_selfbuilt_colorbars)
+        cbar_colors = []
+        cbar_breakpoints = []
+        for color in range(max_cbars):
+            freeze_color_input = False
+            freeze_number_input = False
+            if color >= cbar_color_count:
+                freeze_color_input = True
+                if color > cbar_color_count:
+                    freeze_number_input = True
+            a = st.number_input("n", label_visibility = "collapsed", key = f"number_{color}", disabled = freeze_number_input or freeze_selfbuilt_colorbars)
+            b = st.color_picker("c1", label_visibility = "collapsed", key = f"color_{color}", disabled = freeze_color_input or freeze_selfbuilt_colorbars)
+            if not freeze_color_input:
+                cbar_colors.append(st.session_state[f"color_{color}"])
+            if not freeze_number_input:
+                cbar_breakpoints.append(st.session_state[f"number_{color}"])
+        cmap = colors.ListedColormap(cbar_colors)
+        levels = cbar_breakpoints
+        if not np.all(np.diff(levels) > 0):
+            with error_placeholder:
+                st.error("Värviskaala väärtused peavad olema kasvavas järjekorras")
+                st.stop()
+        norm = colors.BoundaryNorm(levels, cmap.N)
+    with st.expander("Telgede seadistus"):
+        x_axis_visible = st.checkbox("x-telg")
+        y_axis_visible = st.checkbox("y-telg")
+        axis_float_format = st.slider("Telgede komakohad", 0, 3, value = 1)
+        axis_step = st.number_input("Telje samm", 0.1, 10.0, value = 1.0)
     
-    x_axis_title = st.text_input("x-telje pealkiri")
-    y_axis_title = st.text_input("y-telje pealkiri")
-    colorbar_title = st.text_input("Värviskaala pealkiri")
-    chart_title = st.text_input("Joonise pealkiri")
-    
-    draw_dpi = st.number_input("Kuva dpi", 60, value = 300)
-    save_dpi = st.number_input("Salvestuse dpi", 60, value = 300)
-    save_extension = st.radio("Salvestuse formaat", ["png", "svg"])
+    with st.expander("Graafiku tähised"):
+        x_axis_title = st.text_input("x-telje pealkiri")
+        y_axis_title = st.text_input("y-telje pealkiri")
+        colorbar_title = st.text_input("Värviskaala pealkiri")
+        chart_title = st.text_input("Joonise pealkiri")
+    with st.expander("Salvestamise parameetrid"):
+        draw_dpi = st.number_input("Kuva dpi", 60, value = 300)
+        save_dpi = st.number_input("Salvestuse dpi", 60, value = 300)
+        save_extension = st.radio("Salvestuse formaat", ["png", "svg"])
 
 #%%
 
-smoothing_function = "linear"
-smoothing_factor = 1e-6
-
-
-dens = st.slider("Võrgustiku tihedus", 10, 1000, value = 300)
-colorbar_divisions = st.slider("Värvijaotuste arv", 2, 20, value = 10)
-
-if not ip_bounds_from_data:
+if ip_bounds_from_data:
     x_min, x_max = ip_x_lower, ip_x_upper
     y_min, y_max = ip_y_lower, ip_y_upper
-
-if not colorbar_bounds_from_data:
+    
+if cbar_build == "Eelkonstrueeritud" and colorbar_bounds_from_data:
     v_min, v_max = colorbar_x_lower, colorbar_x_upper
 
 xi, yi = np.linspace(x_min, x_max, dens), np.linspace(y_min, y_max, dens)
 xi, yi = np.meshgrid(xi, yi)
 
-rbf = scipy.interpolate.Rbf(x, y, v, function="linear", smooth = smoothing_factor)
+rbf = scipy.interpolate.Rbf(x, y, v, function = interpolation_type, smooth = smoothing_factor)
 zi = rbf(xi, yi)
 
 fig, ax = plt.subplots()
 
-im = ax.imshow(zi, vmin = v_min, vmax = v_max, origin='lower', cmap=discrete_cmap(colorbar_divisions, colorbar_type),
-       extent=[x_min, x_max, y_min, y_max], aspect="equal")
+if cbar_build == "Eelkonstrueeritud":
+    im = ax.imshow(zi, vmin = v_min, vmax = v_max, origin='lower', cmap=discrete_cmap(colorbar_divisions, colorbar_type),
+                   extent=[x_min, x_max, y_min, y_max], aspect="equal")
+    if colorbar_visible:
+        fig.colorbar(im, label = colorbar_title, ticks = np.linspace(v_min, v_max, colorbar_divisions + 1), format=f"%.{colorbar_float_format}f")
+elif cbar_build == "Ehitan ise":
+    im = ax.imshow(zi, origin='lower', cmap=cmap, norm = norm,
+                   extent=[x_min, x_max, y_min, y_max], aspect="equal")
+    if colorbar_visible:
+        fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap, norm = norm), spacing = "proportional", label = colorbar_title, format=f"%.{colorbar_float_format}f")
+
 # ax.set_title("%s" % ('some_text'))
 # start, end = ax.get_ylim()
 # ax.yaxis.set_ticks(np.arange(start, end, 2))
@@ -183,9 +241,6 @@ fig.suptitle(chart_title)
 
 ax.set_xlabel(x_axis_title)
 ax.set_ylabel(y_axis_title)
-
-if colorbar_visible:
-    fig.colorbar(im, label = colorbar_title, ticks = np.linspace(v_min, v_max, colorbar_divisions + 1), format=f"%.{colorbar_float_format}f")
 
 # fig.text(0.075, 0.5, "some_text", ha='center', va='center', rotation="vertical")
 # fig.text(0.45, 0.075, "some_text", ha='center', va='center')
@@ -206,8 +261,8 @@ start_y, end_y = ax.get_ylim()
 ax.xaxis.set_ticks(np.arange(start_x, end_x, axis_step))
 ax.yaxis.set_ticks(np.arange(start_y, end_y, axis_step))
 
-
 st.pyplot(fig, dpi = draw_dpi)
+    
 fn = f"interpolated.{save_extension}"
 img = io.BytesIO()
 plt.savefig(img, format=save_extension, dpi = save_dpi, bbox_inches='tight')
