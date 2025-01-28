@@ -226,7 +226,13 @@ elif cbar_build == "Ehitan ise":
     im = ax.imshow(zi, origin='lower', cmap=cmap, norm = norm,
                    extent=[x_min, x_max, y_min, y_max], aspect="equal")
     if colorbar_visible:
-        fig.colorbar(mpl.cm.ScalarMappable(cmap=cmap, norm = norm), spacing = "proportional", label = colorbar_title, format=f"%.{colorbar_float_format}f")
+        cbar = fig.colorbar(
+            mpl.cm.ScalarMappable(cmap=cmap, norm=norm), 
+            ax=ax,  # Explicitly associate the colorbar with the existing Axes
+            spacing="proportional", 
+            label=colorbar_title, 
+            format=f"%.{colorbar_float_format}f"
+        )
 
 # ax.set_title("%s" % ('some_text'))
 # start, end = ax.get_ylim()
